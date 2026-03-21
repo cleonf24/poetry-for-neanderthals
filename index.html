@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Poetry for Neanderthals: Static Edition</title>
+    <title>Poetry for Neanderthals: Pro Edition</title>
     <style>
         :root {
             --bone-white: #f5f1e6;
@@ -12,6 +12,7 @@
             --slate: #2c3e50;
             --blood-red: #c0392b;
             --leaf-green: #3e8e41;
+            --gold: #f39c12;
         }
 
         body {
@@ -37,14 +38,14 @@
             border: 4px solid var(--dirt-brown);
         }
 
-        h1 { font-size: 2em; margin-bottom: 0.5em; color: var(--dirt-brown); }
+        h1 { font-size: 2em; margin-bottom: 0.2em; color: var(--dirt-brown); }
 
         /* Setup Panel */
         #setup-panel {
             background-color: rgba(0,0,0,0.3);
             padding: 15px;
             border-radius: 10px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             font-size: 0.9em;
         }
 
@@ -78,63 +79,79 @@
         }
 
         button:active { transform: scale(0.95); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
         .btn-primary { background-color: var(--dirt-brown); color: var(--bone-white); }
         .btn-danger { background-color: var(--blood-red); color: var(--bone-white); }
+        .btn-warning { background-color: var(--gold); color: var(--slate); font-size: 1.2em;}
         
-        /* Timer */
-        #timer-display {
-            font-size: 4em;
-            font-weight: bold;
-            color: var(--bone-white);
-            margin: 10px 0;
-            text-shadow: 2px 2px 0 #000;
+        /* Stats HUD */
+        #stats-hud {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            background-color: rgba(0,0,0,0.4);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 15px;
         }
+
+        .stat-box { display: flex; flex-direction: column; }
+        .stat-label { font-size: 0.8em; color: #aaa; }
+        .stat-value { font-size: 3em; font-weight: bold; color: var(--bone-white); text-shadow: 2px 2px 0 #000; }
+        #score-display { color: var(--gold); }
 
         /* The Card */
         #card {
             background-color: var(--bone-white);
             color: var(--stone-grey);
-            padding: 30px 20px;
             border-radius: 20px;
             box-shadow: 0 8px 16px rgba(0,0,0,0.4);
             border: 8px solid var(--stone-grey);
-            margin-top: 20px;
-            cursor: pointer;
-            transition: transform 0.1s, box-shadow 0.1s;
             position: relative;
-            min-height: 200px;
+            min-height: 250px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            user-select: none; /* Prevents text highlighting on rapid clicks */
-        }
-
-        #card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 24px rgba(0,0,0,0.5);
-            border-color: var(--dirt-brown);
-        }
-
-        #card:active {
-            transform: translateY(2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+            user-select: none;
+            overflow: hidden; /* Keep click zones inside borders */
         }
 
         #card.disabled {
             background-color: #a0a0a0;
-            cursor: not-allowed;
-            pointer-events: none;
             border-color: var(--blood-red);
-            transform: none;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            justify-content: center;
         }
 
-        .point-label { font-size: 1.2em; font-weight: bold; color: var(--dirt-brown); margin: 5px 0 0 0;}
-        .word-content { font-size: 2.5em; margin: 5px 0 20px 0; color: var(--blood-red); font-weight: bold;}
-        .phrase-content { font-size: 2em; margin: 5px 0 10px 0; color: var(--slate); font-weight: bold;}
+        /* Clickable Zones inside the card */
+        .click-zone {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .click-zone:hover { background-color: #e8e4d8; }
+        .click-zone:active { background-color: #dcd7c9; }
         
-        hr { border: 2px dashed #ccc; width: 80%; margin: 15px auto; }
-        #status-message { font-style: italic; color: #aaa; margin-top: 15px; }
+        #zone-1pt { border-bottom: 3px dashed #ccc; }
+
+        .point-label { font-size: 1.2em; font-weight: bold; margin: 0; }
+        #zone-1pt .point-label { color: var(--dirt-brown); }
+        #zone-3pt .point-label { color: var(--slate); }
+
+        .word-content { font-size: 2.5em; margin: 5px 0; font-weight: bold; }
+        #zone-1pt .word-content { color: var(--blood-red); }
+        #zone-3pt .word-content { color: var(--slate); }
+        
+        #start-screen {
+            flex: 1; display: flex; flex-direction: column; justify-content: center; cursor: pointer;
+        }
+        #start-screen:hover { background-color: #e8e4d8; }
+
+        #action-row { margin-top: 15px; display: flex; justify-content: center; gap: 15px; }
+        #status-message { font-style: italic; color: #aaa; margin-top: 10px; font-size: 0.9em; }
 
     </style>
 </head>
@@ -152,24 +169,50 @@
         <div class="setup-row">
             <label for="timer-select">Timer:</label>
             <select id="timer-select">
-                <option value="30">30 Seconds</option>
-                <option value="60" selected>60 Seconds</option>
-                <option value="unlimited">Unlimited</option>
+                <option value="30">30s</option>
+                <option value="60" selected>60s</option>
+                <option value="unlimited">∞</option>
             </select>
             <button class="btn-danger" id="reset-btn">Reset Game</button>
         </div>
     </div>
 
-    <div id="timer-display">60</div>
-
-    <div id="card">
-        <div id="card-content">
-            <h2 style="font-size: 2.5em; color: var(--slate);">CLICK ME<br>TO START</h2>
-            <p>TIMER WILL BEGIN.</p>
+    <div id="stats-hud">
+        <div class="stat-box">
+            <span class="stat-label">TIME</span>
+            <span class="stat-value" id="timer-display">60</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">SCORE</span>
+            <span class="stat-value" id="score-display">0</span>
         </div>
     </div>
 
-    <p id="status-message">Setup game, then click card to begin.</p>
+    <div id="card">
+        <div id="start-screen">
+            <h2 style="font-size: 2.5em; color: var(--slate); margin: 0;">CLICK ME<br>TO START</h2>
+            <p style="margin-top: 10px; font-weight: bold;">(Loads instantly)</p>
+        </div>
+
+        <div id="zone-1pt" class="click-zone" style="display: none;">
+            <p class="point-label">+1 POINT:</p>
+            <div class="word-content" id="word-1pt">--</div>
+        </div>
+        <div id="zone-3pt" class="click-zone" style="display: none;">
+            <p class="point-label">+3 POINTS:</p>
+            <div class="word-content" id="word-3pt">--</div>
+        </div>
+        
+        <div id="end-screen" style="display: none;">
+            <h2 style="color: var(--bone-white); font-size: 3em; margin: 0;">TIME UP!</h2>
+        </div>
+    </div>
+
+    <div id="action-row">
+        <button class="btn-warning" id="skip-btn" disabled>SKIP (-1 PT)</button>
+    </div>
+
+    <p id="status-message">Deck is filling up in the background...</p>
 </div>
 
 <script>
@@ -179,8 +222,12 @@
     
     let timerInterval = null;
     let timeLeft = 60;
+    let score = 0;
     let isGameActive = false;
-    let isFetching = false; // Prevent double-clicks during API call
+    
+    // The "Deck"
+    let cardQueue = [];
+    let isFetchingQueue = false;
 
     // --- UI Elements ---
     const elements = {
@@ -191,35 +238,42 @@
         resetBtn: document.getElementById('reset-btn'),
         status: document.getElementById('status-message'),
         timer: document.getElementById('timer-display'),
+        score: document.getElementById('score-display'),
         card: document.getElementById('card'),
-        cardContent: document.getElementById('card-content')
+        startScreen: document.getElementById('start-screen'),
+        endScreen: document.getElementById('end-screen'),
+        zone1pt: document.getElementById('zone-1pt'),
+        zone3pt: document.getElementById('zone-3pt'),
+        word1pt: document.getElementById('word-1pt'),
+        word3pt: document.getElementById('word-3pt'),
+        skipBtn: document.getElementById('skip-btn')
     };
 
-    // --- Init Setup ---
+    // --- Initialization ---
     if (userApiKey) {
         elements.apiKeyInput.value = userApiKey;
         elements.status.innerText = "API Key active. Ready for real Gemini!";
     }
+    
+    // Pre-fill the deck immediately on load
+    fillDeckQueue();
 
     // --- Core Logic ---
 
-    // Handle clicking the big card
-    async function handleCardClick() {
-        if (isFetching) return; // Prevent spamming
-
-        // If game hasn't started, start it
-        if (!isGameActive) {
-            startGame();
-        }
-
-        // Fetch and show next card
-        await fetchNewCard();
-    }
-
     function startGame() {
         isGameActive = true;
-        const selectedTime = elements.timerSelect.value;
+        score = 0;
+        updateScoreDisplay();
+        elements.skipBtn.disabled = false;
         
+        // Hide start screen, show play zones
+        elements.startScreen.style.display = 'none';
+        elements.endScreen.style.display = 'none';
+        elements.zone1pt.style.display = 'flex';
+        elements.zone3pt.style.display = 'flex';
+        elements.card.classList.remove('disabled');
+
+        const selectedTime = elements.timerSelect.value;
         if (selectedTime === 'unlimited') {
             elements.timer.innerText = "∞";
             elements.status.innerText = "Game started (Unlimited time)!";
@@ -229,68 +283,113 @@
             elements.status.innerText = "Game started! Talk good!";
             timerInterval = setInterval(updateTimer, 1000);
         }
+
+        // Pull the first card
+        dealNextCard();
     }
 
     function updateTimer() {
         timeLeft--;
         elements.timer.innerText = timeLeft;
-        if (timeLeft <= 0) {
-            endGame();
-        }
+        if (timeLeft <= 0) endGame();
     }
 
     function endGame() {
         clearInterval(timerInterval);
         isGameActive = false;
         elements.timer.innerText = "0";
+        elements.skipBtn.disabled = true;
         elements.status.innerText = "TIME UP! Click Reset to play again.";
         
-        // "Flip" card back over / disable it
+        elements.zone1pt.style.display = 'none';
+        elements.zone3pt.style.display = 'none';
+        elements.endScreen.style.display = 'block';
         elements.card.classList.add('disabled');
-        elements.cardContent.innerHTML = `
-            <h2 style="color: var(--bone-white); font-size: 3em;">TIME UP!</h2>
-        `;
     }
 
     function resetGame() {
         clearInterval(timerInterval);
         isGameActive = false;
-        isFetching = false;
+        score = 0;
+        updateScoreDisplay();
+        elements.skipBtn.disabled = true;
         
-        // Reset Timer display
         const selectedTime = elements.timerSelect.value;
         elements.timer.innerText = selectedTime === 'unlimited' ? "∞" : selectedTime;
         
-        // Reset Card
+        // Reset Card UI
         elements.card.classList.remove('disabled');
-        elements.cardContent.innerHTML = `
-            <h2 style="font-size: 2.5em; color: var(--slate);">CLICK ME<br>TO START</h2>
-            <p>TIMER WILL BEGIN.</p>
-        `;
+        elements.zone1pt.style.display = 'none';
+        elements.zone3pt.style.display = 'none';
+        elements.endScreen.style.display = 'none';
+        elements.startScreen.style.display = 'flex';
         
-        elements.status.innerText = "Game reset. Ready to play.";
+        elements.status.innerText = `Deck has ${cardQueue.length} cards ready.`;
+        
+        // Ensure deck is full for next round
+        fillDeckQueue();
     }
 
-    // --- Fetching Data ---
-    async function fetchNewCard() {
-        isFetching = true;
-        
-        // Show loading state on card
-        elements.cardContent.innerHTML = `<h2 style="color: var(--slate);">...THINKING...</h2>`;
+    function updateScoreDisplay() {
+        elements.score.innerText = score;
+    }
+
+    // --- Deal & Queue Logic ---
+
+    async function dealNextCard() {
+        // If queue is empty (should be rare due to pre-fetching), show loading
+        if (cardQueue.length === 0) {
+            elements.word1pt.innerText = "...";
+            elements.word3pt.innerText = "LOADING...";
+            elements.status.innerText = "Waiting for Great Spirit...";
+            // Wait for queue to have at least 1 card
+            await waitForCard();
+        }
+
+        const nextCard = cardQueue.shift();
+        elements.word1pt.innerText = nextCard.one_point_word;
+        elements.word3pt.innerText = nextCard.three_point_phrase;
+        elements.status.innerText = `${cardQueue.length} cards remaining in background deck.`;
+
+        // Always try to top up the deck silently in the background
+        fillDeckQueue();
+    }
+
+    // Helper to pause execution until a card arrives if the queue runs dry
+    function waitForCard() {
+        return new Promise(resolve => {
+            const checkInterval = setInterval(() => {
+                if (cardQueue.length > 0) {
+                    clearInterval(checkInterval);
+                    resolve();
+                }
+            }, 200);
+        });
+    }
+
+    // Fetch a batch of cards to keep the queue full
+    async function fillDeckQueue() {
+        // If we already have plenty of cards or are currently fetching, do nothing
+        if (isFetchingQueue || cardQueue.length >= 5) return;
+        isFetchingQueue = true;
 
         if (!userApiKey) {
-            // Use Mock Data
+            // Mock Data Refill
             setTimeout(() => {
-                displayCard(getMockData());
-                isFetching = false;
-            }, 300); // Tiny artificial delay for feel
+                while(cardQueue.length < 10) {
+                    cardQueue.push(getMockCard());
+                }
+                isFetchingQueue = false;
+                if(!isGameActive) elements.status.innerText = "Mock deck full. Ready!";
+            }, 500);
             return;
         }
 
-        // --- REAL GEMINI INTEGRATION ---
+        // --- REAL GEMINI BATCH FETCHING ---
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${userApiKey}`;
         
-        const promptText = "Generate a single 'Poetry for Neanderthals' game card. Return ONLY a valid JSON object. Do not include markdown formatting or backticks. The JSON must have two keys: 'one_point_word' (a single common noun/item) and 'three_point_phrase' (a 2-3 word specific version of that item). Examples: {'one_point_word': 'Bear', 'three_point_phrase': 'Polar Bear'}, {'one_point_word': 'Car', 'three_point_phrase': 'Race Car'}. Make it suitable for a party game.";
+        // Request a batch of 5 cards at once to be efficient
+        const promptText = "Generate 5 'Poetry for Neanderthals' game cards. Return ONLY a valid JSON array of objects. Do not include markdown formatting or backticks. Each object must have two keys: 'one_point_word' (a single common noun) and 'three_point_phrase' (a 2-3 word specific version of that item). Example: [{\"one_point_word\": \"Bear\", \"three_point_phrase\": \"Polar Bear\"}, {\"one_point_word\": \"Car\", \"three_point_phrase\": \"Race Car\"}]. Make it suitable for a party game.";
 
         const requestOptions = {
             method: 'POST',
@@ -303,54 +402,52 @@
             const result = await response.json();
             
             let textResponse = result.candidates[0].content.parts[0].text;
-            
-            // Clean up potential markdown formatting from Gemini
             textResponse = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
             
-            const cardJson = JSON.parse(textResponse);
+            const cardArray = JSON.parse(textResponse);
 
-            if (cardJson.one_point_word && cardJson.three_point_phrase) {
-                displayCard(cardJson);
+            if (Array.isArray(cardArray) && cardArray.length > 0) {
+                cardArray.forEach(card => cardQueue.push(card));
             } else {
-                throw new Error("Invalid response keys.");
+                throw new Error("Invalid response array.");
             }
-
         } catch (error) {
             console.error("Gemini Error:", error);
-            elements.status.innerText = "API Error. Falling back to built-in words.";
-            displayCard(getMockData());
+            // Fallback to pushing a mock card so the game doesn't stall completely
+            cardQueue.push(getMockCard());
         } finally {
-            isFetching = false;
+            isFetchingQueue = false;
+            // Recursively check if we need more
+            if (cardQueue.length < 5) fillDeckQueue(); 
+            if(!isGameActive && cardQueue.length > 0) elements.status.innerText = "Real deck loaded. Ready!";
         }
     }
 
-    // Render the card HTML
-    function displayCard(data) {
-        elements.cardContent.innerHTML = `
-            <p class="point-label">1 POINT:</p>
-            <div class="word-content">${data.one_point_word}</div>
-            <hr>
-            <p class="point-label">3 POINTS:</p>
-            <div class="phrase-content">${data.three_point_phrase}</div>
-        `;
-    }
+    // --- Interactions ---
 
-    // --- Utility/Mock Data ---
-    function getMockData() {
-        const mockCards = [
-            { one_point_word: "SHOE", three_point_phrase: "RUNNING SHOE" },
-            { one_point_word: "BEAR", three_point_phrase: "POLAR BEAR" },
-            { one_point_word: "FIRE", three_point_phrase: "CAMP FIRE" },
-            { one_point_word: "BIRD", three_point_phrase: "BALD EAGLE" },
-            { one_point_word: "WATER", three_point_phrase: "SWIMMING POOL" },
-            { one_point_word: "STAR", three_point_phrase: "SHOOTING STAR" },
-            { one_point_word: "CAR", three_point_phrase: "POLICE CAR" }
-        ];
-        return mockCards[Math.floor(Math.random() * mockCards.length)];
-    }
+    elements.startScreen.addEventListener('click', startGame);
 
-    // --- Event Listeners ---
-    elements.card.addEventListener('click', handleCardClick);
+    elements.zone1pt.addEventListener('click', () => {
+        if (!isGameActive) return;
+        score += 1;
+        updateScoreDisplay();
+        dealNextCard();
+    });
+
+    elements.zone3pt.addEventListener('click', () => {
+        if (!isGameActive) return;
+        score += 3;
+        updateScoreDisplay();
+        dealNextCard();
+    });
+
+    elements.skipBtn.addEventListener('click', () => {
+        if (!isGameActive) return;
+        score -= 1;
+        updateScoreDisplay();
+        dealNextCard();
+    });
+
     elements.resetBtn.addEventListener('click', resetGame);
     
     // Update timer display immediately when dropdown changes (if game not active)
@@ -361,12 +458,31 @@
         }
     });
 
-    // API Key Management
+    // --- Utilities & API Setup ---
+
+    function getMockCard() {
+        const mockCards = [
+            { one_point_word: "SHOE", three_point_phrase: "RUNNING SHOE" },
+            { one_point_word: "BEAR", three_point_phrase: "POLAR BEAR" },
+            { one_point_word: "FIRE", three_point_phrase: "CAMP FIRE" },
+            { one_point_word: "BIRD", three_point_phrase: "BALD EAGLE" },
+            { one_point_word: "WATER", three_point_phrase: "SWIMMING POOL" },
+            { one_point_word: "STAR", three_point_phrase: "SHOOTING STAR" },
+            { one_point_word: "CAR", three_point_phrase: "POLICE CAR" },
+            { one_point_word: "TREE", three_point_phrase: "PINE TREE" },
+            { one_point_word: "BOOK", three_point_phrase: "COMIC BOOK" },
+            { one_point_word: "PHONE", three_point_phrase: "CELL PHONE" }
+        ];
+        return mockCards[Math.floor(Math.random() * mockCards.length)];
+    }
+
     elements.saveKeyBtn.addEventListener('click', () => {
         userApiKey = elements.apiKeyInput.value.trim();
         if (userApiKey) {
             localStorage.setItem(STORAGE_KEY_API_KEY, userApiKey);
-            elements.status.innerText = "Key Saved!";
+            elements.status.innerText = "Key Saved! Filling real deck...";
+            cardQueue = []; // Clear mock queue
+            fillDeckQueue(); // Refill with real cards
         }
     });
 
@@ -374,6 +490,8 @@
         localStorage.removeItem(STORAGE_KEY_API_KEY);
         userApiKey = null;
         elements.apiKeyInput.value = '';
+        cardQueue = []; // clear real queue
+        fillDeckQueue(); // refill with mock
         elements.status.innerText = "Key Cleared. Using mock data.";
     });
 
