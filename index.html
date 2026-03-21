@@ -376,7 +376,8 @@
         const promptText = `Generate 5 'Poetry for Neanderthals' game cards. 
         You MUST return an array containing 5 objects.
         Each object must have exactly two keys: "one_point_word" (a single noun) and "three_point_phrase" (a 2-3 word specific version of that item, must include the single word).
-        The three point phrase should be a common phrase in British English.
+        The three point phrase should be a common phrase.
+        Do not repeat the same word.
         Example:
         [
           {"one_point_word": "BEAR", "three_point_phrase": "POLAR BEAR"},
