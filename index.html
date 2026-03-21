@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Poetry for Neanderthals: Static Edition</title>
+    <style>
+        :root {
+            --bone-white: #f5f1e6;
+            --stone-grey: #4a4e5c;
+            --dirt-brown: #8b5a2b;
+            --slate: #2c3e50;
+            --blood-red: #c0392b;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--slate);
+            color: var(--bone-white);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-transform: uppercase;
+        }
+
+        #game-container {
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+            background-color: #3e4451;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            border: 4px solid var(--dirt-brown);
+        }
+
+        h1 { font-size: 2em; margin-bottom: 0.5em; color: var(--dirt-brown); }
+
+        /* Setup / Key Input */
+        #setup-panel {
+            background-color: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            width: 80%;
+            padding: 10px;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            background-color: var(--bone-white);
+            border: 2px solid var(--stone-grey);
+            border-radius: 5px;
+        }
+
+        /* Controls */
+        #game-controls { margin-bottom: 20px; }
+
+        button {
+            font-size: 1.2em;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background 0.2s;
+            background-color: var(--dirt-brown);
+            color: var(--bone-white);
+        }
+
+        button:hover { opacity: 0.9; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #stop-timer-btn { background-color: var(--blood-red); display: none; }
+
+        /* Timer */
+        #timer-display {
+            font-size: 4em;
+            font-weight: bold;
+            color: var(--bone-white);
+            margin: 20px 0;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        /* The Card */
+        #card {
+            display: none; /* Hidden until loaded */
+            background-color: var(--bone-white);
+            color: var(--stone-grey);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+            border: 8px solid var(--stone-grey);
+            position: relative;
+        }
+
+        #card h2 {
+            font-size: 3em;
+            margin-top: 0;
+            color: var(--blood-red);
+            text-decoration: underline overline;
+        }
+
+        #card p { font-size: 1.3em; margin: 15px 0 5px 0; font-weight: bold; }
+
+        #forbidden-words-list {
+            list-style-type: none;
+            padding: 0;
+            font-size: 1.5em;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        #forbidden-words-list li {
+            border-bottom: 2px dashed #ccc;
+            padding-bottom: 5px;
+        }
+
+        /* Status messages */
+        #status-message { font-style: italic; color: #aaa; margin-top: 10px; }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>Poetry Neanderthal</h1>
+
+    <div id="setup-panel">
+        <p>To use real Gemini, enter API Key below. (Saved only in this browser)</p>
+        <input type="text" id="api-key-input" placeholder="Enter Gemini API Key...">
+        <br>
+        <button id="save-key-btn">Save Key</button>
+        <button id="clear-key-btn">Clear Key / Use Mock Data</button>
+    </div>
+
+    <div id="game-controls">
+        <button id="get-card-btn">NEW THING TO SAY</button>
+        <button id="start-timer-btn">START TIMER (60s)</button>
+        <button id="stop-timer-btn">STOP</button>
+    </div>
+
+    <p id="status-message">Press 'NEW THING' to begin!</p>
+
+    <div id="timer-display">60</div>
+
+    <div id="card">
+        <p>DESCRIBE THIS THING:</p>
+        <h2 id="card-target-word">--LOADING--</h2>
+        <p>NO USE THESE WORDS:</p>
+        <ul id="forbidden-words-list">
+            <li>(Forbidden 1)</li>
+            <li>(Forbidden 2)</li>
+            <li>(Forbidden 3)</li>
+        </ul>
+    </div>
+
+</div>
+
+<script>
+    // --- Configuration ---
+    let GAME_TIME = 60; // Seconds
+    const STORAGE_KEY_API_KEY = 'neanderthal_gemini_api_key';
+
+    // --- State Management ---
+    let currentCardData = null;
+    let timerInterval = null;
+    let timeLeft = GAME_TIME;
+    let isTimerRunning = false;
+    let userApiKey = localStorage.getItem(STORAGE_KEY_API_KEY) || null;
+
+    // --- UI Elements ---
+    const elements = {
+        setupPanel: document.getElementById('setup-panel'),
+        apiKeyInput: document.getElementById('api-key-input'),
+        saveKeyBtn: document.getElementById('save-key-btn'),
+        clearKeyBtn: document.getElementById('clear-key-btn'),
+        getCardBtn: document.getElementById('get-card-btn'),
+        startTimerBtn: document.getElementById('start-timer-btn'),
+        stopTimerBtn: document.getElementById('stop-timer-btn'),
+        status: document.getElementById('status-message'),
+        timer: document.getElementById('timer-display'),
+        card: document.getElementById('card'),
+        cardTarget: document.getElementById('card-target-word'),
+        cardForbidden: document.getElementById('forbidden-words-list')
+    };
+
+    // --- Init Setup ---
+    if (userApiKey) {
+        elements.apiKeyInput.value = userApiKey;
+        elements.status.innerText = "API Key Loaded. Ready for real Gemini!";
+    } else {
+        elements.status.innerText = "Using mock data (no API key). Enter key above for real calls.";
+    }
+
+    // --- Core Logic ---
+
+    // Function to "fetch" a card. This handles both mock data and real Gemini calls.
+    async function fetchNewCard() {
+        elements.status.innerText = "Consulting Great Spirit (Gemini)...";
+        elements.card.style.display = 'none'; // Hide current card
+
+        // If no key, use mock data immediately
+        if (!userApiKey) {
+            console.log("No API key provided. Using mock data.");
+            currentCardData = getMockData();
+            displayCard(currentCardData);
+            return;
+        }
+
+        // --- REAL GEMINI INTEGRATION CODE ---
+        // Warning: Exposing API key on client-side is risky. (See notes)
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${userApiKey}`;
+        
+        const promptText = "Generate a single 'Poetry for Neanderthals' game card. Return a JSON object (no other text) with two keys: 'word_to_describe' (a complex word or phrase) and 'forbidden_words' (an array of 3-5 simple words frequently used to describe it). E.g., {'word_to_describe': 'Aeroplane', 'forbidden_words': ['fly', 'wings', 'sky', 'engine']}. The complexity should be suitable for a party game.";
+
+        const requestOptions = {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+        };
+
+        try {
+            const response = await fetch(geminiEndpoint, requestOptions);
+            const result = await response.json();
+            
+            // Extract and parse the JSON response from Gemini
+            const textResponse = result.candidates[0].content.parts[0].text;
+            const cardJson = JSON.parse(textResponse.match(/\{[\s\S]*\}/)[0]); // Naive JSON extraction
+
+            if (cardJson.word_to_describe && cardJson.forbidden_words) {
+                currentCardData = cardJson;
+                displayCard(currentCardData);
+            } else {
+                throw new Error("Invalid response format from Gemini.");
+            }
+
+        } catch (error) {
+            console.error("Gemini Error:", error);
+            elements.status.innerText = "SPIRIT ANGRY. Using backup data.";
+            currentCardData = getMockData();
+            displayCard(currentCardData);
+        }
+    }
+
+    // Function to render the card data to the screen
+    function displayCard(data) {
+        elements.cardTarget.innerText = data.word_to_describe;
+        elements.cardForbidden.innerHTML = ''; // Clear old words
+        data.forbidden_words.forEach(word => {
+            const li = document.createElement('li');
+            li.innerText = word;
+            elements.cardForbidden.appendChild(li);
+        });
+
+        elements.status.innerText = "NEW THING! Talk good or hit with stick!";
+        elements.card.style.display = 'block'; // Show card
+        resetTimer(); // Reset timer for new card
+    }
+
+    // --- Timer Logic ---
+    function startTimer() {
+        if (isTimerRunning) return;
+        isTimerRunning = true;
+        timeLeft = GAME_TIME;
+        elements.timer.innerText = timeLeft;
+        elements.getCardBtn.disabled = true;
+        elements.startTimerBtn.style.display = 'none';
+        elements.stopTimerBtn.style.display = 'inline-block';
+
+        timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    function updateTimer() {
+        timeLeft--;
+        elements.timer.innerText = timeLeft;
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            elements.status.innerText = "TIME OVER! DID TEAM GUESS?";
+            elements.getCardBtn.disabled = false;
+            elements.stopTimerBtn.style.display = 'none';
+            elements.startTimerBtn.style.display = 'inline-block';
+        }
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        isTimerRunning = false;
+        elements.status.innerText = "Timer Stopped.";
+        elements.getCardBtn.disabled = false;
+        elements.stopTimerBtn.style.display = 'none';
+        elements.startTimerBtn.style.display = 'inline-block';
+    }
+
+    function resetTimer() {
+        stopTimer();
+        timeLeft = GAME_TIME;
+        elements.timer.innerText = timeLeft;
+        elements.status.innerText = "Ready. Press START TIMER.";
+    }
+
+    // --- Utility/Mock Data ---
+    functiongetMockData() {
+        const mockCards = [
+            { word_to_describe: "SMARTPHONE", forbidden_words: ["Call", "Text", "Screen", "App", "Internet"] },
+            { word_to_describe: "MICROWAVE", forbidden_words: ["Hot", "Cook", "Fast", "Box", "Waves"] },
+            { word_to_describe: "ASTRONAUT", forbidden_words: ["Space", "Star", "Fly", "Suit", "Moon"] },
+            { word_to_describe: "DEMOCRACY", forbidden_words: ["Vote", "Government", "People", "Rule", "Choice"] },
+            { word_to_describe: "TACO TUESDAY", forbidden_words: ["Food", "Day", "Mexican", "Shell", "Week"] }
+        ];
+        // Return a random one
+        return mockCards[Math.floor(Math.random() * mockCards.length)];
+    }
+
+    // --- Event Listeners ---
+    elements.getCardBtn.addEventListener('click', fetchNewCard);
+    elements.startTimerBtn.addEventListener('click', startTimer);
+    elements.stopTimerBtn.addEventListener('click', stopTimer);
+
+    // API Key Management
+    elements.saveKeyBtn.addEventListener('click', () => {
+        userApiKey = elements.apiKeyInput.value.trim();
+        if (userApiKey) {
+            localStorage.setItem(STORAGE_KEY_API_KEY, userApiKey);
+            elements.status.innerText = "Key Saved!";
+        } else {
+            elements.status.innerText = "Enter a valid key first.";
+        }
+    });
+
+    elements.clearKeyBtn.addEventListener('click', () => {
+        localStorage.removeItem(STORAGE_KEY_API_KEY);
+        userApiKey = null;
+        elements.apiKeyInput.value = '';
+        elements.status.innerText = "Key Cleared. Using mock data.";
+    });
+
+</script>
+
+</body>
+</html>
