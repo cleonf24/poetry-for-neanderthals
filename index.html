@@ -112,7 +112,7 @@
             display: flex;
             flex-direction: column;
             user-select: none;
-            overflow: hidden; /* Keep click zones inside borders */
+            overflow: hidden;
         }
 
         #card.disabled {
@@ -121,7 +121,6 @@
             justify-content: center;
         }
 
-        /* Clickable Zones inside the card */
         .click-zone {
             flex: 1;
             display: flex;
@@ -173,7 +172,7 @@
                 <option value="60" selected>60s</option>
                 <option value="unlimited">∞</option>
             </select>
-            <button class="btn-danger" id="reset-btn">Reset Game</button>
+            <button class="btn-danger" id="reset-btn">Reset</button>
         </div>
     </div>
 
@@ -216,7 +215,6 @@
 </div>
 
 <script>
-    // --- State Management ---
     const STORAGE_KEY_API_KEY = 'neanderthal_gemini_api_key';
     let userApiKey = localStorage.getItem(STORAGE_KEY_API_KEY) || null;
     
@@ -225,11 +223,9 @@
     let score = 0;
     let isGameActive = false;
     
-    // The "Deck"
     let cardQueue = [];
     let isFetchingQueue = false;
 
-    // --- UI Elements ---
     const elements = {
         apiKeyInput: document.getElementById('api-key-input'),
         saveKeyBtn: document.getElementById('save-key-btn'),
@@ -249,16 +245,12 @@
         skipBtn: document.getElementById('skip-btn')
     };
 
-    // --- Initialization ---
     if (userApiKey) {
         elements.apiKeyInput.value = userApiKey;
         elements.status.innerText = "API Key active. Ready for real Gemini!";
     }
     
-    // Pre-fill the deck immediately on load
     fillDeckQueue();
-
-    // --- Core Logic ---
 
     function startGame() {
         isGameActive = true;
@@ -266,7 +258,6 @@
         updateScoreDisplay();
         elements.skipBtn.disabled = false;
         
-        // Hide start screen, show play zones
         elements.startScreen.style.display = 'none';
         elements.endScreen.style.display = 'none';
         elements.zone1pt.style.display = 'flex';
@@ -284,7 +275,6 @@
             timerInterval = setInterval(updateTimer, 1000);
         }
 
-        // Pull the first card
         dealNextCard();
     }
 
@@ -317,7 +307,6 @@
         const selectedTime = elements.timerSelect.value;
         elements.timer.innerText = selectedTime === 'unlimited' ? "∞" : selectedTime;
         
-        // Reset Card UI
         elements.card.classList.remove('disabled');
         elements.zone1pt.style.display = 'none';
         elements.zone3pt.style.display = 'none';
@@ -325,8 +314,6 @@
         elements.startScreen.style.display = 'flex';
         
         elements.status.innerText = `Deck has ${cardQueue.length} cards ready.`;
-        
-        // Ensure deck is full for next round
         fillDeckQueue();
     }
 
@@ -334,15 +321,11 @@
         elements.score.innerText = score;
     }
 
-    // --- Deal & Queue Logic ---
-
     async function dealNextCard() {
-        // If queue is empty (should be rare due to pre-fetching), show loading
         if (cardQueue.length === 0) {
             elements.word1pt.innerText = "...";
             elements.word3pt.innerText = "LOADING...";
             elements.status.innerText = "Waiting for Great Spirit...";
-            // Wait for queue to have at least 1 card
             await waitForCard();
         }
 
@@ -351,11 +334,9 @@
         elements.word3pt.innerText = nextCard.three_point_phrase;
         elements.status.innerText = `${cardQueue.length} cards remaining in background deck.`;
 
-        // Always try to top up the deck silently in the background
         fillDeckQueue();
     }
 
-    // Helper to pause execution until a card arrives if the queue runs dry
     function waitForCard() {
         return new Promise(resolve => {
             const checkInterval = setInterval(() => {
@@ -367,14 +348,11 @@
         });
     }
 
-    // Fetch a batch of cards to keep the queue full
     async function fillDeckQueue() {
-        // If we already have plenty of cards or are currently fetching, do nothing
         if (isFetchingQueue || cardQueue.length >= 5) return;
         isFetchingQueue = true;
 
         if (!userApiKey) {
-            // Mock Data Refill
             setTimeout(() => {
                 while(cardQueue.length < 10) {
                     cardQueue.push(getMockCard());
@@ -385,45 +363,62 @@
             return;
         }
 
-        // --- REAL GEMINI BATCH FETCHING ---
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${userApiKey}`;
+        // --- THE FIX IS HERE ---
+        // 1. Upgraded to gemini-1.5-flash
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${userApiKey}`;
         
-        // Request a batch of 5 cards at once to be efficient
-        const promptText = "Generate 5 'Poetry for Neanderthals' game cards. Return ONLY a valid JSON array of objects. Do not include markdown formatting or backticks. Each object must have two keys: 'one_point_word' (a single common noun) and 'three_point_phrase' (a 2-3 word specific version of that item). Example: [{\"one_point_word\": \"Bear\", \"three_point_phrase\": \"Polar Bear\"}, {\"one_point_word\": \"Car\", \"three_point_phrase\": \"Race Car\"}]. Make it suitable for a party game.";
+        // 2. Updated prompt to clearly outline the required JSON structure
+        const promptText = `Generate 5 'Poetry for Neanderthals' game cards. 
+        You MUST return an array containing 5 objects.
+        Each object must have exactly two keys: "one_point_word" (a single common noun) and "three_point_phrase" (a 2-3 word specific version of that item).
+        Example:
+        [
+          {"one_point_word": "BEAR", "three_point_phrase": "POLAR BEAR"},
+          {"one_point_word": "CAR", "three_point_phrase": "RACE CAR"}
+        ]`;
 
+        // 3. Added responseMimeType to force native JSON output
         const requestOptions = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
+            })
         };
 
         try {
             const response = await fetch(geminiEndpoint, requestOptions);
             const result = await response.json();
             
-            let textResponse = result.candidates[0].content.parts[0].text;
-            textResponse = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+            // 4. Added proper error handling to tell the user what went wrong
+            if (!response.ok) {
+                console.error("API Error Details:", result);
+                throw new Error(result.error?.message || "Check your API Key and Network.");
+            }
             
+            // Because we forced JSON mode, we don't need to parse out markdown backticks anymore
+            const textResponse = result.candidates[0].content.parts[0].text;
             const cardArray = JSON.parse(textResponse);
 
             if (Array.isArray(cardArray) && cardArray.length > 0) {
                 cardArray.forEach(card => cardQueue.push(card));
             } else {
-                throw new Error("Invalid response array.");
+                throw new Error("Invalid response format from AI.");
             }
         } catch (error) {
-            console.error("Gemini Error:", error);
-            // Fallback to pushing a mock card so the game doesn't stall completely
+            console.error("Fetch Error:", error);
+            elements.status.innerText = "API ERROR: " + error.message;
+            // Add a mock card just so the game doesn't crash entirely while erroring
             cardQueue.push(getMockCard());
         } finally {
             isFetchingQueue = false;
-            // Recursively check if we need more
             if (cardQueue.length < 5) fillDeckQueue(); 
-            if(!isGameActive && cardQueue.length > 0) elements.status.innerText = "Real deck loaded. Ready!";
+            if(!isGameActive && cardQueue.length > 0 && userApiKey) elements.status.innerText = "Real deck loaded. Ready!";
         }
     }
-
-    // --- Interactions ---
 
     elements.startScreen.addEventListener('click', startGame);
 
@@ -450,15 +445,12 @@
 
     elements.resetBtn.addEventListener('click', resetGame);
     
-    // Update timer display immediately when dropdown changes (if game not active)
     elements.timerSelect.addEventListener('change', () => {
         if (!isGameActive) {
             const val = elements.timerSelect.value;
             elements.timer.innerText = val === 'unlimited' ? "∞" : val;
         }
     });
-
-    // --- Utilities & API Setup ---
 
     function getMockCard() {
         const mockCards = [
@@ -481,8 +473,8 @@
         if (userApiKey) {
             localStorage.setItem(STORAGE_KEY_API_KEY, userApiKey);
             elements.status.innerText = "Key Saved! Filling real deck...";
-            cardQueue = []; // Clear mock queue
-            fillDeckQueue(); // Refill with real cards
+            cardQueue = []; 
+            fillDeckQueue(); 
         }
     });
 
@@ -490,8 +482,8 @@
         localStorage.removeItem(STORAGE_KEY_API_KEY);
         userApiKey = null;
         elements.apiKeyInput.value = '';
-        cardQueue = []; // clear real queue
-        fillDeckQueue(); // refill with mock
+        cardQueue = []; 
+        fillDeckQueue(); 
         elements.status.innerText = "Key Cleared. Using mock data.";
     });
 
