@@ -191,7 +191,6 @@
     <div id="card">
         <div id="start-screen">
             <h2 style="font-size: 2.5em; color: var(--slate); margin: 0;">CLICK ME<br>TO START</h2>
-            <p style="margin-top: 10px; font-weight: bold;">(Loads instantly)</p>
         </div>
 
         <div id="zone-1pt" class="click-zone" style="display: none;">
@@ -317,7 +316,6 @@
         elements.startScreen.style.display = 'flex';
         
         elements.status.classList.remove('error-text');
-        elements.status.innerText = `Deck has ${cardQueue.length} cards ready.`;
         fillDeckQueue();
     }
 
@@ -377,7 +375,7 @@
         
         const promptText = `Generate 5 'Poetry for Neanderthals' game cards. 
         You MUST return an array containing 5 objects.
-        Each object must have exactly two keys: "one_point_word" (a single common noun) and "three_point_phrase" (a 2-3 word specific version of that item).
+        Each object must have exactly two keys: "one_point_word" (a single common noun) and "three_point_phrase" (a 2-3 word specific version of that item, must include the single word).
         Example:
         [
           {"one_point_word": "BEAR", "three_point_phrase": "POLAR BEAR"},
