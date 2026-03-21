@@ -40,7 +40,6 @@
 
         h1 { font-size: 2em; margin-bottom: 0.2em; color: var(--dirt-brown); }
 
-        /* Setup Panel */
         #setup-panel {
             background-color: rgba(0,0,0,0.3);
             padding: 15px;
@@ -65,6 +64,7 @@
             border: 2px solid var(--stone-grey);
             border-radius: 5px;
             font-family: inherit;
+            width: 50%;
         }
 
         button {
@@ -84,7 +84,6 @@
         .btn-danger { background-color: var(--blood-red); color: var(--bone-white); }
         .btn-warning { background-color: var(--gold); color: var(--slate); font-size: 1.2em;}
         
-        /* Stats HUD */
         #stats-hud {
             display: flex;
             justify-content: space-around;
@@ -100,7 +99,6 @@
         .stat-value { font-size: 3em; font-weight: bold; color: var(--bone-white); text-shadow: 2px 2px 0 #000; }
         #score-display { color: var(--gold); }
 
-        /* The Card */
         #card {
             background-color: var(--bone-white);
             color: var(--stone-grey);
@@ -150,7 +148,10 @@
         #start-screen:hover { background-color: #e8e4d8; }
 
         #action-row { margin-top: 15px; display: flex; justify-content: center; gap: 15px; }
-        #status-message { font-style: italic; color: #aaa; margin-top: 10px; font-size: 0.9em; }
+        
+        /* Debug log styling */
+        #status-message { font-style: italic; color: #aaa; margin-top: 10px; font-size: 0.9em; word-wrap: break-word; }
+        .error-text { color: #ff6b6b !important; font-weight: bold; font-style: normal !important;}
 
     </style>
 </head>
@@ -161,7 +162,7 @@
 
     <div id="setup-panel">
         <div class="setup-row">
-            <input type="text" id="api-key-input" placeholder="Gemini API Key (Optional)" autocomplete="off">
+            <input type="password" id="api-key-input" placeholder="Paste Gemini Key Here" autocomplete="off">
             <button class="btn-primary" id="save-key-btn">Save</button>
             <button class="btn-danger" id="clear-key-btn">Clear</button>
         </div>
@@ -211,7 +212,7 @@
         <button class="btn-warning" id="skip-btn" disabled>SKIP (-1 PT)</button>
     </div>
 
-    <p id="status-message">Deck is filling up in the background...</p>
+    <p id="status-message">Waiting to start...</p>
 </div>
 
 <script>
@@ -246,7 +247,7 @@
     };
 
     if (userApiKey) {
-        elements.apiKeyInput.value = userApiKey;
+        elements.apiKeyInput.value = "********"; // Hide key on reload
         elements.status.innerText = "API Key active. Ready for real Gemini!";
     }
     
@@ -267,10 +268,12 @@
         const selectedTime = elements.timerSelect.value;
         if (selectedTime === 'unlimited') {
             elements.timer.innerText = "∞";
+            elements.status.classList.remove('error-text');
             elements.status.innerText = "Game started (Unlimited time)!";
         } else {
             timeLeft = parseInt(selectedTime);
             elements.timer.innerText = timeLeft;
+            elements.status.classList.remove('error-text');
             elements.status.innerText = "Game started! Talk good!";
             timerInterval = setInterval(updateTimer, 1000);
         }
@@ -313,6 +316,7 @@
         elements.endScreen.style.display = 'none';
         elements.startScreen.style.display = 'flex';
         
+        elements.status.classList.remove('error-text');
         elements.status.innerText = `Deck has ${cardQueue.length} cards ready.`;
         fillDeckQueue();
     }
@@ -332,7 +336,10 @@
         const nextCard = cardQueue.shift();
         elements.word1pt.innerText = nextCard.one_point_word;
         elements.word3pt.innerText = nextCard.three_point_phrase;
-        elements.status.innerText = `${cardQueue.length} cards remaining in background deck.`;
+        
+        if(!elements.status.classList.contains('error-text')){
+            elements.status.innerText = `${cardQueue.length} cards remaining in background deck.`;
+        }
 
         fillDeckQueue();
     }
@@ -358,16 +365,16 @@
                     cardQueue.push(getMockCard());
                 }
                 isFetchingQueue = false;
-                if(!isGameActive) elements.status.innerText = "Mock deck full. Ready!";
+                if(!isGameActive) {
+                    elements.status.classList.remove('error-text');
+                    elements.status.innerText = "Mock deck full. Ready!";
+                }
             }, 500);
             return;
         }
 
-        // --- THE FIX IS HERE ---
-        // 1. Upgraded to gemini-1.5-flash
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${userApiKey}`;
         
-        // 2. Updated prompt to clearly outline the required JSON structure
         const promptText = `Generate 5 'Poetry for Neanderthals' game cards. 
         You MUST return an array containing 5 objects.
         Each object must have exactly two keys: "one_point_word" (a single common noun) and "three_point_phrase" (a 2-3 word specific version of that item).
@@ -377,15 +384,12 @@
           {"one_point_word": "CAR", "three_point_phrase": "RACE CAR"}
         ]`;
 
-        // 3. Added responseMimeType to force native JSON output
         const requestOptions = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 contents: [{ parts: [{ text: promptText }] }],
-                generationConfig: {
-                    responseMimeType: "application/json"
-                }
+                generationConfig: { responseMimeType: "application/json" }
             })
         };
 
@@ -393,30 +397,37 @@
             const response = await fetch(geminiEndpoint, requestOptions);
             const result = await response.json();
             
-            // 4. Added proper error handling to tell the user what went wrong
+            // --- DIAGNOSTICS: Check if Google rejected the request entirely ---
             if (!response.ok) {
-                console.error("API Error Details:", result);
-                throw new Error(result.error?.message || "Check your API Key and Network.");
+                console.error("FULL GOOGLE ERROR:", result);
+                let errorMsg = result.error?.message || "Unknown Error";
+                throw new Error(`Google says: "${errorMsg}" (Code: ${response.status})`);
             }
             
-            // Because we forced JSON mode, we don't need to parse out markdown backticks anymore
             const textResponse = result.candidates[0].content.parts[0].text;
             const cardArray = JSON.parse(textResponse);
 
             if (Array.isArray(cardArray) && cardArray.length > 0) {
                 cardArray.forEach(card => cardQueue.push(card));
+                elements.status.classList.remove('error-text');
             } else {
-                throw new Error("Invalid response format from AI.");
+                throw new Error("AI returned bad data.");
             }
         } catch (error) {
             console.error("Fetch Error:", error);
-            elements.status.innerText = "API ERROR: " + error.message;
-            // Add a mock card just so the game doesn't crash entirely while erroring
+            
+            // DISPLAY EXACT ERROR ON SCREEN
+            elements.status.classList.add('error-text');
+            elements.status.innerText = "❌ " + error.message;
+            
+            // Fallback so game doesn't break
             cardQueue.push(getMockCard());
         } finally {
             isFetchingQueue = false;
-            if (cardQueue.length < 5) fillDeckQueue(); 
-            if(!isGameActive && cardQueue.length > 0 && userApiKey) elements.status.innerText = "Real deck loaded. Ready!";
+            if (cardQueue.length < 5 && !elements.status.classList.contains('error-text')) fillDeckQueue(); 
+            if(!isGameActive && cardQueue.length > 0 && !elements.status.classList.contains('error-text')) {
+                elements.status.innerText = "Real deck loaded. Ready!";
+            }
         }
     }
 
@@ -457,22 +468,26 @@
             { one_point_word: "SHOE", three_point_phrase: "RUNNING SHOE" },
             { one_point_word: "BEAR", three_point_phrase: "POLAR BEAR" },
             { one_point_word: "FIRE", three_point_phrase: "CAMP FIRE" },
-            { one_point_word: "BIRD", three_point_phrase: "BALD EAGLE" },
-            { one_point_word: "WATER", three_point_phrase: "SWIMMING POOL" },
-            { one_point_word: "STAR", three_point_phrase: "SHOOTING STAR" },
-            { one_point_word: "CAR", three_point_phrase: "POLICE CAR" },
-            { one_point_word: "TREE", three_point_phrase: "PINE TREE" },
-            { one_point_word: "BOOK", three_point_phrase: "COMIC BOOK" },
-            { one_point_word: "PHONE", three_point_phrase: "CELL PHONE" }
+            { one_point_word: "BIRD", three_point_phrase: "BALD EAGLE" }
         ];
         return mockCards[Math.floor(Math.random() * mockCards.length)];
     }
 
     elements.saveKeyBtn.addEventListener('click', () => {
-        userApiKey = elements.apiKeyInput.value.trim();
+        // Aggressively clean the API key of spaces, newlines, or invisible characters
+        let rawKey = elements.apiKeyInput.value.trim();
+        userApiKey = rawKey.replace(/\s+/g, ''); 
+        
         if (userApiKey) {
+            // Check if it's the right kind of key
+            if (!userApiKey.startsWith("AIza")) {
+                alert("WARNING: Google AI Studio keys usually start with 'AIza'. Your key looks different. If it fails, ensure you got it from aistudio.google.com");
+            }
+
             localStorage.setItem(STORAGE_KEY_API_KEY, userApiKey);
-            elements.status.innerText = "Key Saved! Filling real deck...";
+            elements.status.classList.remove('error-text');
+            elements.status.innerText = "Key Saved! Fetching real deck...";
+            elements.apiKeyInput.value = "********";
             cardQueue = []; 
             fillDeckQueue(); 
         }
@@ -483,8 +498,9 @@
         userApiKey = null;
         elements.apiKeyInput.value = '';
         cardQueue = []; 
-        fillDeckQueue(); 
+        elements.status.classList.remove('error-text');
         elements.status.innerText = "Key Cleared. Using mock data.";
+        fillDeckQueue(); 
     });
 
 </script>
