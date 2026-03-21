@@ -57,14 +57,14 @@
             flex-wrap: wrap;
         }
 
-        input[type="text"], select {
+        input[type="text"], input[type="password"], select {
             padding: 8px;
             font-size: 1em;
             background-color: var(--bone-white);
             border: 2px solid var(--stone-grey);
             border-radius: 5px;
             font-family: inherit;
-            width: 50%;
+            width: 45%;
         }
 
         button {
@@ -146,10 +146,11 @@
             flex: 1; display: flex; flex-direction: column; justify-content: center; cursor: pointer;
         }
         #start-screen:hover { background-color: #e8e4d8; }
+        
+        /* New Loading State for Start Screen */
+        #start-screen.loading { background-color: #dcd7c9; cursor: not-allowed; opacity: 0.7; }
 
         #action-row { margin-top: 15px; display: flex; justify-content: center; gap: 15px; }
-        
-        /* Debug log styling */
         #status-message { font-style: italic; color: #aaa; margin-top: 10px; font-size: 0.9em; word-wrap: break-word; }
         .error-text { color: #ff6b6b !important; font-weight: bold; font-style: normal !important;}
 
@@ -173,7 +174,8 @@
                 <option value="60" selected>60s</option>
                 <option value="unlimited">∞</option>
             </select>
-            <button class="btn-danger" id="reset-btn">Reset</button>
+            <button class="btn-danger" id="reset-btn">Reset / End Game</button>
+            <button class="btn-warning" id="clear-memory-btn" style="font-size: 0.9em; padding: 5px;">Clear Word History</button>
         </div>
     </div>
 
@@ -189,8 +191,9 @@
     </div>
 
     <div id="card">
-        <div id="start-screen">
-            <h2 style="font-size: 2.5em; color: var(--slate); margin: 0;">CLICK ME<br>TO START</h2>
+        <div id="start-screen" class="loading">
+            <h2 id="start-title" style="font-size: 2.5em; color: var(--slate); margin: 0;">GATHERING<br>CARDS...</h2>
+            <p id="start-subtitle" style="margin-top: 10px; font-weight: bold;">(Please wait)</p>
         </div>
 
         <div id="zone-1pt" class="click-zone" style="display: none;">
@@ -211,12 +214,16 @@
         <button class="btn-warning" id="skip-btn" disabled>SKIP (-1 PT)</button>
     </div>
 
-    <p id="status-message">Waiting to start...</p>
+    <p id="status-message">Initializing game engine...</p>
 </div>
 
 <script>
+    // --- Storage & Memory ---
     const STORAGE_KEY_API_KEY = 'neanderthal_gemini_api_key';
+    const STORAGE_KEY_HISTORY = 'neanderthal_word_history';
+    
     let userApiKey = localStorage.getItem(STORAGE_KEY_API_KEY) || null;
+    let playedWordsHistory = JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY)) || [];
     
     let timerInterval = null;
     let timeLeft = 60;
@@ -230,6 +237,7 @@
         apiKeyInput: document.getElementById('api-key-input'),
         saveKeyBtn: document.getElementById('save-key-btn'),
         clearKeyBtn: document.getElementById('clear-key-btn'),
+        clearMemoryBtn: document.getElementById('clear-memory-btn'),
         timerSelect: document.getElementById('timer-select'),
         resetBtn: document.getElementById('reset-btn'),
         status: document.getElementById('status-message'),
@@ -237,6 +245,8 @@
         score: document.getElementById('score-display'),
         card: document.getElementById('card'),
         startScreen: document.getElementById('start-screen'),
+        startTitle: document.getElementById('start-title'),
+        startSubtitle: document.getElementById('start-subtitle'),
         endScreen: document.getElementById('end-screen'),
         zone1pt: document.getElementById('zone-1pt'),
         zone3pt: document.getElementById('zone-3pt'),
@@ -245,14 +255,53 @@
         skipBtn: document.getElementById('skip-btn')
     };
 
+    // --- Initialization ---
     if (userApiKey) {
-        elements.apiKeyInput.value = "********"; // Hide key on reload
+        elements.apiKeyInput.value = "********";
         elements.status.innerText = "API Key active. Ready for real Gemini!";
     }
     
+    // Kick off the initial card fetch
     fillDeckQueue();
 
+    // --- Memory Management ---
+    function recordWordPlayed(word) {
+        const cleanWord = word.toUpperCase().trim();
+        if (!playedWordsHistory.includes(cleanWord)) {
+            playedWordsHistory.push(cleanWord);
+            // Save to localStorage so it survives page reloads
+            localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(playedWordsHistory));
+        }
+    }
+
+    elements.clearMemoryBtn.addEventListener('click', () => {
+        playedWordsHistory = [];
+        localStorage.removeItem(STORAGE_KEY_HISTORY);
+        elements.status.classList.remove('error-text');
+        elements.status.innerText = "Word history cleared! Duplicate words are now allowed again.";
+    });
+
+    // --- UI State Management ---
+    function updateStartScreenState() {
+        if (isGameActive) return; // Don't mess with it if we're playing
+        
+        if (cardQueue.length > 0) {
+            elements.startScreen.classList.remove('loading');
+            elements.startTitle.innerHTML = "CLICK ME<br>TO START";
+            elements.startSubtitle.innerText = "(Cards Ready)";
+            elements.status.classList.remove('error-text');
+            elements.status.innerText = `Deck has ${cardQueue.length} cards ready. Memory contains ${playedWordsHistory.length} past words.`;
+        } else {
+            elements.startScreen.classList.add('loading');
+            elements.startTitle.innerHTML = "GATHERING<br>CARDS...";
+            elements.startSubtitle.innerText = "(Please wait)";
+        }
+    }
+
+    // --- Game Logic ---
     function startGame() {
+        if (cardQueue.length === 0) return; // Gatekeeper: Cannot start without cards
+        
         isGameActive = true;
         score = 0;
         updateScoreDisplay();
@@ -267,12 +316,10 @@
         const selectedTime = elements.timerSelect.value;
         if (selectedTime === 'unlimited') {
             elements.timer.innerText = "∞";
-            elements.status.classList.remove('error-text');
             elements.status.innerText = "Game started (Unlimited time)!";
         } else {
             timeLeft = parseInt(selectedTime);
             elements.timer.innerText = timeLeft;
-            elements.status.classList.remove('error-text');
             elements.status.innerText = "Game started! Talk good!";
             timerInterval = setInterval(updateTimer, 1000);
         }
@@ -315,73 +362,81 @@
         elements.endScreen.style.display = 'none';
         elements.startScreen.style.display = 'flex';
         
-        elements.status.classList.remove('error-text');
-        fillDeckQueue();
+        updateStartScreenState();
+        fillDeckQueue(); // Top up the deck if needed
     }
 
     function updateScoreDisplay() {
         elements.score.innerText = score;
     }
 
-    async function dealNextCard() {
+    function dealNextCard() {
+        // Because of our gatekeeper, this should ideally never happen mid-game,
+        // but if they click insanely fast and outrun the API, we fallback gracefully.
         if (cardQueue.length === 0) {
-            elements.word1pt.innerText = "...";
-            elements.word3pt.innerText = "LOADING...";
-            elements.status.innerText = "Waiting for Great Spirit...";
-            await waitForCard();
+           elements.word1pt.innerText = "WAIT";
+           elements.word3pt.innerText = "API TOO SLOW";
+           setTimeout(() => { if(isGameActive) dealNextCard(); }, 1000);
+           return;
         }
 
         const nextCard = cardQueue.shift();
         elements.word1pt.innerText = nextCard.one_point_word;
         elements.word3pt.innerText = nextCard.three_point_phrase;
         
+        // Record that we saw this word so we don't get it again in future games
+        recordWordPlayed(nextCard.one_point_word);
+        
         if(!elements.status.classList.contains('error-text')){
             elements.status.innerText = `${cardQueue.length} cards remaining in background deck.`;
         }
 
-        fillDeckQueue();
+        fillDeckQueue(); // Always ask for more cards
     }
 
-    function waitForCard() {
-        return new Promise(resolve => {
-            const checkInterval = setInterval(() => {
-                if (cardQueue.length > 0) {
-                    clearInterval(checkInterval);
-                    resolve();
-                }
-            }, 200);
-        });
-    }
-
+    // --- API & Prompt Engine ---
     async function fillDeckQueue() {
-        if (isFetchingQueue || cardQueue.length >= 5) return;
+        // We fetch batches of 10 now to ensure we never run out mid-game
+        if (isFetchingQueue || cardQueue.length >= 8) return; 
         isFetchingQueue = true;
+        updateStartScreenState();
 
         if (!userApiKey) {
             setTimeout(() => {
-                while(cardQueue.length < 10) {
-                    cardQueue.push(getMockCard());
-                }
+                while(cardQueue.length < 15) { cardQueue.push(getMockCard()); }
                 isFetchingQueue = false;
-                if(!isGameActive) {
-                    elements.status.classList.remove('error-text');
-                    elements.status.innerText = "Mock deck full. Ready!";
-                }
+                updateStartScreenState();
             }, 500);
             return;
         }
 
         const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${userApiKey}`;
         
-        const promptText = `Generate 5 'Poetry for Neanderthals' game cards. 
-        You MUST return an array containing 5 objects.
-        Each object must have exactly two keys: "one_point_word" (a single noun) and "three_point_phrase" (a 2-3 word specific version of that item, must include the single word).
-        The three point phrase should be a common phrase.
-        Do not repeat the same word.
-        Example:
+        // Create the exclusion string from our history. 
+        // We take the last 50 to prevent the prompt from getting too massive over time.
+        let exclusionText = "";
+        if (playedWordsHistory.length > 0) {
+            const recentHistory = playedWordsHistory.slice(-50).join(", ");
+            exclusionText = `\nCRITICAL RULE: DO NOT use any of the following words for your "one_point_word": [${recentHistory}].\n`;
+        }
+        
+        // THE NEW, STRICT PROMPT
+        const promptText = `Generate 10 'Poetry for Neanderthals' game cards. 
+        You MUST return a JSON array containing 10 objects.
+        Each object must have exactly two keys: "one_point_word" and "three_point_phrase".
+        
+        RULES:
+        1. "one_point_word" MUST be a single, highly common everyday noun.
+        2. "three_point_phrase" MUST be a highly recognizable 2-to-3 word phrase or compound noun that strictly INCLUDES the "one_point_word". 
+        3. The words must be simple enough for a party game.
+        ${exclusionText}
+        Examples of perfect formatting:
         [
           {"one_point_word": "BEAR", "three_point_phrase": "POLAR BEAR"},
-          {"one_point_word": "CAR", "three_point_phrase": "RACE CAR"}
+          {"one_point_word": "DOG", "three_point_phrase": "HOT DOG"},
+          {"one_point_word": "STAR", "three_point_phrase": "SHOOTING STAR"},
+          {"one_point_word": "PAPER", "three_point_phrase": "TOILET PAPER"},
+          {"one_point_word": "SHOE", "three_point_phrase": "RUNNING SHOE"}
         ]`;
 
         const requestOptions = {
@@ -397,7 +452,6 @@
             const response = await fetch(geminiEndpoint, requestOptions);
             const result = await response.json();
             
-            // --- DIAGNOSTICS: Check if Google rejected the request entirely ---
             if (!response.ok) {
                 console.error("FULL GOOGLE ERROR:", result);
                 let errorMsg = result.error?.message || "Unknown Error";
@@ -411,27 +465,28 @@
                 cardArray.forEach(card => cardQueue.push(card));
                 elements.status.classList.remove('error-text');
             } else {
-                throw new Error("AI returned bad data.");
+                throw new Error("AI returned bad data format.");
             }
         } catch (error) {
             console.error("Fetch Error:", error);
-            
-            // DISPLAY EXACT ERROR ON SCREEN
             elements.status.classList.add('error-text');
             elements.status.innerText = "❌ " + error.message;
-            
-            // Fallback so game doesn't break
-            cardQueue.push(getMockCard());
+            // Add fallback cards so game isn't bricked
+            cardQueue.push(getMockCard(), getMockCard(), getMockCard());
         } finally {
             isFetchingQueue = false;
-            if (cardQueue.length < 5 && !elements.status.classList.contains('error-text')) fillDeckQueue(); 
-            if(!isGameActive && cardQueue.length > 0 && !elements.status.classList.contains('error-text')) {
-                elements.status.innerText = "Real deck loaded. Ready!";
-            }
+            updateStartScreenState();
+            // If we still need more, fetch again
+            if (cardQueue.length < 8 && !elements.status.classList.contains('error-text')) fillDeckQueue(); 
         }
     }
 
-    elements.startScreen.addEventListener('click', startGame);
+    // --- Event Listeners ---
+    elements.startScreen.addEventListener('click', () => {
+        if (!elements.startScreen.classList.contains('loading')) {
+            startGame();
+        }
+    });
 
     elements.zone1pt.addEventListener('click', () => {
         if (!isGameActive) return;
@@ -463,33 +518,38 @@
         }
     });
 
+    // --- Utilities ---
     function getMockCard() {
         const mockCards = [
             { one_point_word: "SHOE", three_point_phrase: "RUNNING SHOE" },
             { one_point_word: "BEAR", three_point_phrase: "POLAR BEAR" },
             { one_point_word: "FIRE", three_point_phrase: "CAMP FIRE" },
-            { one_point_word: "BIRD", three_point_phrase: "BALD EAGLE" }
+            { one_point_word: "BIRD", three_point_phrase: "BALD EAGLE" },
+            { one_point_word: "WATER", three_point_phrase: "WATER BOTTLE" },
+            { one_point_word: "STAR", three_point_phrase: "SHOOTING STAR" },
+            { one_point_word: "DOG", three_point_phrase: "HOT DOG" },
+            { one_point_word: "PAPER", three_point_phrase: "TOILET PAPER" }
         ];
-        return mockCards[Math.floor(Math.random() * mockCards.length)];
+        // Filter out played words even from mock data
+        const availableMocks = mockCards.filter(c => !playedWordsHistory.includes(c.one_point_word.toUpperCase()));
+        if (availableMocks.length > 0) {
+            return availableMocks[Math.floor(Math.random() * availableMocks.length)];
+        }
+        return mockCards[Math.floor(Math.random() * mockCards.length)]; // Fallback if all used
     }
 
     elements.saveKeyBtn.addEventListener('click', () => {
-        // Aggressively clean the API key of spaces, newlines, or invisible characters
         let rawKey = elements.apiKeyInput.value.trim();
         userApiKey = rawKey.replace(/\s+/g, ''); 
         
         if (userApiKey) {
-            // Check if it's the right kind of key
-            if (!userApiKey.startsWith("AIza")) {
-                alert("WARNING: Google AI Studio keys usually start with 'AIza'. Your key looks different. If it fails, ensure you got it from aistudio.google.com");
-            }
-
             localStorage.setItem(STORAGE_KEY_API_KEY, userApiKey);
             elements.status.classList.remove('error-text');
             elements.status.innerText = "Key Saved! Fetching real deck...";
             elements.apiKeyInput.value = "********";
-            cardQueue = []; 
-            fillDeckQueue(); 
+            cardQueue = []; // Dump current cards
+            updateStartScreenState();
+            fillDeckQueue(); // Get new ones with new key
         }
     });
 
@@ -500,6 +560,7 @@
         cardQueue = []; 
         elements.status.classList.remove('error-text');
         elements.status.innerText = "Key Cleared. Using mock data.";
+        updateStartScreenState();
         fillDeckQueue(); 
     });
 
