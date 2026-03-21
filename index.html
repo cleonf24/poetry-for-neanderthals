@@ -410,7 +410,7 @@
             return;
         }
 
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${userApiKey}`;
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${userApiKey}`;
         
         // Create the exclusion string from our history. 
         // We take the last 50 to prevent the prompt from getting too massive over time.
@@ -426,9 +426,8 @@
         Each object must have exactly two keys: "one_point_word" and "three_point_phrase".
         
         RULES:
-        1. "one_point_word" MUST be a single, highly common everyday noun.
-        2. "three_point_phrase" MUST be a highly recognizable 2-to-3 word phrase or compound noun that strictly INCLUDES the "one_point_word". 
-        3. The words must be simple enough for a party game.
+        1. "one_point_word" MUST be a single noun.
+        2. "three_point_phrase" MUST be a recognizable 2-to-3 word phrase or compound noun that strictly INCLUDES the "one_point_word".
         ${exclusionText}
         Examples of perfect formatting:
         [
