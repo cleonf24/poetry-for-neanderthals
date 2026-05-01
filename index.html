@@ -410,7 +410,7 @@
             return;
         }
 
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${userApiKey}`;
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${userApiKey}`;
         
         // Create the exclusion string from our history. 
         // We take the last 50 to prevent the prompt from getting too massive over time.
